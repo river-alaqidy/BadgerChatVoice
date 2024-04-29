@@ -1,7 +1,8 @@
 import createChatDelegator from "./ChatDelegator";
+import { isLoggedIn, ofRandom } from "./Util"
 
 const createChatAgent = () => {
-    const CS571_WITAI_ACCESS_TOKEN = ""; // Put your CLIENT access token here.
+    const CS571_WITAI_ACCESS_TOKEN = "LMMYB24S4FSH3HSYEALAKDDSYT4ZZU2Q";
 
     const delegator = createChatDelegator();
 
@@ -85,15 +86,41 @@ const createChatAgent = () => {
     }
 
     const handleGetHelp = async () => {
-        return "I should try to help...";
+        const helpResponses = ["Try asking 'give me a list of chatrooms', or ask for more help!",
+                "Try asking 'register for an account', or ask for more help!",
+                "Try asking 'tell me the latest 3 messages', or ask for more help!"];
+        return ofRandom(helpResponses);
     }
 
     const handleGetChatrooms = async () => {
-        return "I should respond with a list of chatrooms..."
+        return ofRandom([`Of course, there are ${chatrooms.length} chatrooms: ${chatrooms.join(", ")}`, 
+            `The chatrooms available are: ${chatrooms.join(", ")}`]);
     }
 
     const handleGetMessages = async (data) => {
-        return "I should respond with a list of messages..."
+        const hasSpecifiedNumber = data.entities["wit$number:number"] ? true : false;
+        const numMsgs = hasSpecifiedNumber ? data.entities["wit$number:number"][0].value : 1;
+        const hasChatroom = data.entities["chatroom_names:chatroom_names"] ? true : false;
+        let url = "https://cs571.org/api/s24/hw11/messages";
+        
+        if (hasChatroom) {
+            url += `?chatroom=${data.entities["chatroom_names:chatroom_names"][0].value}`;
+        } 
+        if (hasSpecifiedNumber) {
+            if (hasChatroom) {
+                url += `&num=${numMsgs}`;
+            } else {
+                url += `?&num=${numMsgs}`;
+            }
+        }
+        const resp = await fetch(url, {
+            headers: {
+                "X-CS571-ID": CS571.getBadgerId()
+            }
+        });
+
+        const messages = await resp.json();
+        return messages.messages.map(msg => `In ${msg.chatroom}, ${msg.poster} created a post titled '${msg.title}' saying '${msg.content}'`);
     }
 
     const handleLogin = async () => {
@@ -105,15 +132,48 @@ const createChatAgent = () => {
     }
 
     const handleCreateMessage = async (data) => {
-        return await delegator.beginDelegation("CREATE");
+        return await delegator.beginDelegation("CREATE", data);
     }
 
     const handleLogout = async () => {
-        return "I should try to log out..."
+        if (!(await isLoggedIn())) {
+            return ofRandom([
+                "You must be logged in to logout!", 
+                "You need to be logged in before logging out!"
+            ])
+        } else {
+            const resp = await fetch("https://cs571.org/api/s24/hw11/logout", {
+                method: "POST",
+                credentials: "include",
+                headers: {
+                    "X-CS571-ID": CS571.getBadgerId()
+                }
+            })
+            const body = await resp.json();
+            return body.msg;
+        }
     }
 
     const handleWhoAmI = async () => {
-        return "I should see who I am..."
+        const resp = await fetch("https://cs571.org/api/s24/hw11/whoami", {
+            credentials: "include",
+            headers: {
+                "X-CS571-ID": CS571.getBadgerId()
+            }
+        })
+        const body = await resp.json();
+        if (body.isLoggedIn) {
+            return ofRandom([
+                `You are currently logged in as ${body.user.username}`, 
+                `You are logged in as ${body.user.username}`
+            ])
+        } else {
+            return ofRandom([
+                "You are not logged in.", 
+                "Sorry, please log in first."
+            ])
+        }
+        
     }
 
     return {
